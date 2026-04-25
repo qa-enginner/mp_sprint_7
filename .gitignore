@@ -1,0 +1,8 @@
+.idea
+**/static/admin/*
+**/__pycache__
+
+plans
+configs
+.venv
+.env

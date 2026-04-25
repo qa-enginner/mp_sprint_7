@@ -1,0 +1,135 @@
+services:
+  postgres:
+      image: postgres:16
+      container_name: postgres
+      environment:
+        - POSTGRES_MULTIPLE_DATABASES=${POSTGRES_DB},${ETL_POSTGRES_DB}
+        - POSTGRES_USER=${POSTGRES_USER}
+        - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      volumes:
+        - ./init-scripts/01-create-databases.sh:/docker-entrypoint-initdb.d/01-create-databases.sh
+        - ./init-db/database_dump.sql:/docker-entrypoint-initdb.d/database_dump.sql
+        - ./init-scripts/02-load-dump.sh:/docker-entrypoint-initdb.d/02-load-dump.sh
+      ports:
+        - "5432:5432"
+      healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U postgres"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+
+  redis:
+    image: redis:6.2.6
+    container_name: redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  elasticsearch:
+    image: elasticsearch:8.6.2
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    
+  auth-service:
+    build: ./services/auth-service
+    container_name: auth_service
+    ports:
+      - "8002:8000"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - SECRET_KEY=${SECRET_KEY}
+      - ALGORITHM=${ALGORITHM}
+    depends_on:
+      - postgres
+      - redis
+
+  content-service:
+    build: ./services/content-service
+    container_name: content_service
+    ports:
+      - "8001:8000"
+    environment:
+      - PROJECT_NAME=movies
+      - REDIS_HOST=redis
+      - ELASTIC_HOST=elasticsearch
+    depends_on:
+      - redis
+      - elasticsearch
+      - auth-service
+
+  etl_service:
+    build: ./services/etl-service
+    container_name: etl_service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${ETL_POSTGRES_DB}
+      - ELASTIC_HOST=${ELASTIC_HOST}
+      - ELASTIC_PORT=${ELASTIC_PORT}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_DB=${REDIS_DB}
+      - BATCH_SIZE=${BATCH_SIZE}
+      - SLEEP_INTERVAL=${SLEEP_INTERVAL}
+      - MAX_RETRIES=${MAX_RETRIES}
+      - STATE_KEY=${STATE_KEY}
+    
+  admin-panel:
+    build: ./services/admin-panel/app
+    container_name: admin_panel
+    expose:
+      - "8000"
+    env_file:
+      - ./.env
+    environment:
+      - DOCKER=true
+    volumes:
+      - staticdata:/opt/app/static
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    volumes:
+      - ./services/admin-panel/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./services/admin-panel/configs:/etc/nginx/conf.d:ro
+      - staticdata:/data/static
+    depends_on:
+      - admin-panel
+    ports:
+      - "80:80"
+
+volumes:
+  staticdata:
