@@ -4,9 +4,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from redis.asyncio import Redis
 
-from api.v1 import auth, users
+from api.v1 import auth, users, oauth
 from core import config
 from core.middleware import logging_middleware
+from core.cors import setup_cors
 from db import redis_db
 from db.postgres import create_database, wait_for_postgres
 
@@ -75,11 +76,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Setup CORS middleware
+setup_cors(app)
+
 app.middleware('http')(logging_middleware)
 
 
 app.include_router(auth.router, prefix='/api/v1/auth', tags=['Auth'])
 app.include_router(users.router, prefix='/api/v1/users', tags=['Users'])
+app.include_router(oauth.router, prefix='/api/v1/oauth', tags=['OAuth'])
 
 
 if __name__ == "__main__":

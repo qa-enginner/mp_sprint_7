@@ -60,6 +60,9 @@ services:
       - REDIS_DB=0
       - SECRET_KEY=${SECRET_KEY}
       - ALGORITHM=${ALGORITHM}
+      - YANDEX_CLIENT_ID=${YANDEX_CLIENT_ID}
+      - YANDEX_CLIENT_SECRET=${YANDEX_CLIENT_SECRET}
+      - YANDEX_REDIRECT_URI=${YANDEX_REDIRECT_URI}
     depends_on:
       - postgres
       - redis
@@ -111,8 +114,6 @@ services:
       - "8000"
     env_file:
       - ./.env
-    environment:
-      - DOCKER=true
     volumes:
       - staticdata:/opt/app/static
     depends_on:

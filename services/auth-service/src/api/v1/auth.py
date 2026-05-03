@@ -41,7 +41,7 @@ async def login(
 ):
     """
     Authenticate user by email and password.
-    
+
     Returns access and refresh tokens upon successful authentication.
     """
     return await AuthService.login(login_data, request, db)
@@ -79,7 +79,7 @@ async def logout(
 ):
     """
     Выход пользователя из системы.
-    
+
     Использует optional_security, который не вызывает автоматическую ошибку
     при отсутствии токена, но все равно требует валидный токен для выхода.
     """

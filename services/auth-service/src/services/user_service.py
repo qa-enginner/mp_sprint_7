@@ -1,10 +1,11 @@
 import uuid
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from fastapi import HTTPException, status
 from werkzeug.security import generate_password_hash
 
-from models.entity import User, LoginHistory
+from models.entity import User, LoginHistory, SocialAccount
 from schemas.entity import (
     UserUpdateLogin,
     UserInDB,
@@ -115,3 +116,76 @@ class UserService:
         result = await db.execute(stmt)
         history = result.scalars().all()
         return [LoginHistoryResponse.from_orm(entry) for entry in history]
+    
+    @staticmethod
+    async def find_or_create_user_by_social(
+        provider: str,
+        provider_user_id: str,
+        email: Optional[str],
+        name: Optional[str],
+        avatar_url: Optional[str],
+        db: AsyncSession
+    ) -> User:
+        """Находит существующего пользователя по соц-аккаунту
+        или создает нового."""
+        # Ищем существующую связь
+        stmt = select(SocialAccount).where(
+            SocialAccount.provider == provider,
+            SocialAccount.provider_user_id == provider_user_id
+        )
+        result = await db.execute(stmt)
+        social_account = result.scalar_one_or_none()
+        
+        if social_account:
+            # Возвращаем существующего пользователя
+            stmt_user = select(User).where(User.id == social_account.user_id)
+            result_user = await db.execute(stmt_user)
+            user = result_user.scalar_one_or_none()
+            if user:
+                return user
+        
+        # Ищем пользователя по email
+        user = None
+        if email:
+            stmt = select(User).where(User.email == email)
+            result = await db.execute(stmt)
+            user = result.scalar_one_or_none()
+        
+        if not user:
+            # Создаем нового пользователя
+            # Генерируем уникальный логин на основе provider_user_id
+            login = f"{provider}_{provider_user_id[:8]}"
+            # Проверяем, не занят ли логин
+            existing = await db.execute(
+                select(User).where(User.login == login)
+            )
+            if existing.scalar_one_or_none():
+                # Добавляем суффикс
+                import random
+                login = f"{login}_{random.randint(1000, 9999)}"
+            
+            # Пароль генерируем случайный,
+            # т.к. пользователь входит через соцсеть
+            password = str(uuid.uuid4())
+            user = User(
+                login=login,
+                email=email or f"{provider_user_id}@{provider}.temp",
+                password=password,
+                first_name=name or "",
+                last_name=""
+            )
+            db.add(user)
+            await db.commit()
+            await db.refresh(user)
+        
+        # Создаем связь пользователя с соцсетью
+        social_account = SocialAccount(
+            user_id=user.id,
+            provider=provider,
+            provider_user_id=provider_user_id,
+            provider_email=email
+        )
+        db.add(social_account)
+        await db.commit()
+        
+        return user

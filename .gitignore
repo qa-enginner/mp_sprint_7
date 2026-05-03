@@ -7,3 +7,6 @@ docs
 **/static/admin/*
 **/__pycache__/
 .pytest_cache
+plans
+configs
+t.txt
