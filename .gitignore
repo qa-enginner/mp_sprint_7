@@ -1,8 +1,9 @@
-.idea
-**/static/admin/*
-**/__pycache__
-
-plans
-configs
 .venv
 .env
+.DS_Store
+.idea
+logs
+docs
+**/static/admin/*
+**/__pycache__/
+.pytest_cache
