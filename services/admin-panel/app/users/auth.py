@@ -25,6 +25,9 @@ class CustomBackend(BaseBackend):
             'accept': 'application/json',
             'Content-Type': 'application/json'
         }
+        # Добавляем X-Request-Id, если он есть в request
+        if hasattr(request, 'request_id') and request.request_id:
+            headers['X-Request-Id'] = request.request_id
         response = requests.post(
             login_url, data=json.dumps(payload), headers=headers
         )
@@ -45,6 +48,9 @@ class CustomBackend(BaseBackend):
             'accept': 'application/json',
             'Authorization': f'Bearer {access_token}'
         }
+        # Также передаем X-Request-Id для запроса /me
+        if hasattr(request, 'request_id') and request.request_id:
+            headers_with_token['X-Request-Id'] = request.request_id
         me_response = requests.get(me_url, headers=headers_with_token)
         if me_response.status_code != http.HTTPStatus.OK:
             return None
@@ -99,13 +105,16 @@ class CustomBackend(BaseBackend):
         except User.DoesNotExist:
             return None
 
-    def refresh_tokens(self, refresh_token):
+    def refresh_tokens(self, refresh_token, request=None):
         """Обновляет access и refresh токены через auth-service."""
         url = settings.AUTH_API_REFRESH_URL
         headers = {
             'accept': 'application/json',
             'Content-Type': 'application/json'
         }
+        # Добавляем X-Request-Id, если он есть в request
+        if request and hasattr(request, 'request_id') and request.request_id:
+            headers['X-Request-Id'] = request.request_id
         payload = {'refresh_token': refresh_token}
         response = requests.post(
             url, data=json.dumps(payload), headers=headers

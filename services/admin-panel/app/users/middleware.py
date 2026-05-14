@@ -1,11 +1,12 @@
 import jwt
 import time
 import json
+import uuid
+import requests
+import http
 from django.conf import settings
 from django.contrib.auth import logout
 from django.shortcuts import redirect
-import requests
-import http
 
 
 class TokenRefreshMiddleware:
@@ -39,7 +40,7 @@ class TokenRefreshMiddleware:
             if exp and exp < time.time() + 60:  # Если истекает в течение минуты
                 # Токен скоро истечет, пытаемся обновить
                 if refresh_token:
-                    new_tokens = self.refresh_tokens(refresh_token)
+                    new_tokens = self.refresh_tokens(refresh_token, request)
                     if new_tokens:
                         request.session['access_token'] = new_tokens.get('access_token')
                         request.session['refresh_token'] = new_tokens.get('refresh_token')
@@ -61,13 +62,16 @@ class TokenRefreshMiddleware:
 
         return self.get_response(request)
 
-    def refresh_tokens(self, refresh_token):
+    def refresh_tokens(self, refresh_token, request=None):
         """Вызывает эндпоинт обновления токенов."""
         url = settings.AUTH_API_REFRESH_URL
         headers = {
             'accept': 'application/json',
             'Content-Type': 'application/json'
         }
+        # Добавляем X-Request-Id, если он есть в request
+        if request and hasattr(request, 'request_id') and request.request_id:
+            headers['X-Request-Id'] = request.request_id
         payload = {'refresh_token': refresh_token}
         try:
             response = requests.post(url, data=json.dumps(payload), headers=headers)
@@ -76,3 +80,26 @@ class TokenRefreshMiddleware:
         except requests.RequestException:
             pass
         return None
+
+
+class RequestIdMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        # Получаем request_id из заголовка Nginx
+        request_id = request.headers.get('X-Request-Id')
+
+        if not request_id:
+            # Генерируем новый request_id, если заголовок отсутствует
+            request_id = str(uuid.uuid4())
+
+        # Сохраняем в request для использования в views и других middleware
+        request.request_id = request_id
+
+        response = self.get_response(request)
+
+        # Передаем request_id дальше в FastAPI (в заголовке ответа)
+        response['X-Request-Id'] = request_id
+
+        return response

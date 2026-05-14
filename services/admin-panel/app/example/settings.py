@@ -15,6 +15,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'secret_key')
 DEBUG = os.getenv('DEBUG', False) == 'True'
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(', ')
+CSRF_TRUSTED_ORIGINS = ['http://localhost', 'http://127.0.0.1']
 
 # Application definition
 
@@ -41,12 +42,22 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
+    'users.middleware.RequestIdMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+# Настройка заголовков для проброса
+USE_X_FORWARDED_HOST = True
+USE_X_FORWARDED_PORT = True
+
+# Проброс кастомных заголовков
+PROXY_HEADERS = {
+    'X-Request-Id': 'HTTP_X_REQUEST_ID',
+}
 
 CORS_ALLOWED_ORIGINS = ["http://127.0.0.1:8080",]
 
@@ -102,7 +113,7 @@ class AuthAndMoviesRouter:
     - default: для авторизации (пользователи, сессии, права доступа, admin)
     - movies: только для контента (фильмы, жанры, персоны и т.д.)
     """
-    
+
     # Приложения, которые должны быть ТОЛЬКО в default
     DEFAULT_APPS = {
         'auth',        # django.contrib.auth
@@ -111,40 +122,40 @@ class AuthAndMoviesRouter:
         'admin',       # django.contrib.admin
         'users',       # если у вас есть свое приложение users
     }
-    
+
     # Приложения, которые должны быть ТОЛЬКО в movies
     MOVIES_APPS = {
         'movies',      # ваше приложение с фильмами
         # добавьте другие приложения, связанные с контентом
     }
-    
+
     def db_for_read(self, model, **hints):
         app_label = model._meta.app_label
-        
+
         if app_label in self.DEFAULT_APPS:
             return 'default'
         elif app_label in self.MOVIES_APPS:
             return 'movies'
-        
+
         # По умолчанию default
         return 'default'
-    
+
     def db_for_write(self, model, **hints):
         app_label = model._meta.app_label
-        
+
         if app_label in self.DEFAULT_APPS:
             return 'default'
         elif app_label in self.MOVIES_APPS:
             return 'movies'
-        
+
         return 'default'
-    
+
     def allow_relation(self, obj1, obj2, **hints):
         """
         Разрешаем связи только между объектами в одной БД
         """
         return obj1._state.db == obj2._state.db
-    
+
     def allow_migrate(self, db, app_label, model_name=None, **hints):
         """
         Критически важно для миграций!
@@ -152,11 +163,11 @@ class AuthAndMoviesRouter:
         # Приложения default идут только в default
         if app_label in self.DEFAULT_APPS:
             return db == 'default'
-        
+
         # Приложения movies идут только в movies
         if app_label in self.MOVIES_APPS:
             return db == 'movies'
-        
+
         # Все остальные приложения по умолчанию идут в default
         return db == 'default'
 
