@@ -69,7 +69,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-
 app.include_router(film.router, prefix='/api/v1/film', tags=['Films'])
 app.include_router(genre.router, prefix='/api/v1/genre', tags=['Genres'])
 app.include_router(person.router, prefix='/api/v1/person', tags=['Persons'])

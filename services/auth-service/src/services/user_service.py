@@ -85,6 +85,33 @@ class UserService:
         return UserInDB.from_orm(user)
 
     @staticmethod
+    async def update_superuser(
+        user_id: uuid.UUID,
+        is_superuser: bool,
+        db: AsyncSession
+    ) -> UserInDB:
+        """
+        Обновляет статус суперпользователя (is_superuser)
+        для указанного пользователя.
+        """
+        # Проверяем, существует ли пользователь
+        stmt = select(User).where(User.id == user_id)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        # Обновляем поле is_superuser
+        user.is_superuser = is_superuser
+        await db.commit()
+        await db.refresh(user)
+
+        return UserInDB.from_orm(user)
+
+    @staticmethod
     async def get_user(
         user_id: uuid.UUID,
         db: AsyncSession
@@ -116,7 +143,7 @@ class UserService:
         result = await db.execute(stmt)
         history = result.scalars().all()
         return [LoginHistoryResponse.from_orm(entry) for entry in history]
-    
+
     @staticmethod
     async def find_or_create_user_by_social(
         provider: str,
@@ -135,7 +162,7 @@ class UserService:
         )
         result = await db.execute(stmt)
         social_account = result.scalar_one_or_none()
-        
+
         if social_account:
             # Возвращаем существующего пользователя
             stmt_user = select(User).where(User.id == social_account.user_id)
@@ -143,14 +170,14 @@ class UserService:
             user = result_user.scalar_one_or_none()
             if user:
                 return user
-        
+
         # Ищем пользователя по email
         user = None
         if email:
             stmt = select(User).where(User.email == email)
             result = await db.execute(stmt)
             user = result.scalar_one_or_none()
-        
+
         if not user:
             # Создаем нового пользователя
             # Генерируем уникальный логин на основе provider_user_id
@@ -163,7 +190,7 @@ class UserService:
                 # Добавляем суффикс
                 import random
                 login = f"{login}_{random.randint(1000, 9999)}"
-            
+
             # Пароль генерируем случайный,
             # т.к. пользователь входит через соцсеть
             password = str(uuid.uuid4())
@@ -177,7 +204,7 @@ class UserService:
             db.add(user)
             await db.commit()
             await db.refresh(user)
-        
+
         # Создаем связь пользователя с соцсетью
         social_account = SocialAccount(
             user_id=user.id,
@@ -187,5 +214,5 @@ class UserService:
         )
         db.add(social_account)
         await db.commit()
-        
+
         return user

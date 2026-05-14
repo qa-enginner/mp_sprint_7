@@ -36,19 +36,40 @@ class Settings(BaseSettings):
     redis_port: int = int(os.getenv("REDIS_PORT", "6379"))
     redis_db: int = int(os.getenv("REDIS_DB", "0"))
 
+    # Настройки Jaeger для трассировки
+    jaeger_agent_host: str = os.getenv("JAEGER_AGENT_HOST", "localhost")
+    jaeger_agent_port: int = int(os.getenv("JAEGER_AGENT_PORT", "6831"))
+    jaeger_collector_endpoint: str = os.getenv(
+        "JAEGER_COLLECTOR_ENDPOINT",
+        "http://jaeger:14268/api/traces"
+    )
+    enable_tracing: bool = os.getenv("ENABLE_TRACING", "true").lower() in (
+        "true", "1", "yes"
+    )
+
+    # Rate limiting
+    request_limit_per_minute: int = int(
+        os.getenv("REQUEST_LIMIT_PER_MINUTE", "20")
+    )
+
     # Настройки JWT
-    secret_key: str = os.getenv("SECRET_KEY", "a-string-secret-at-least-256-bits-long")
+    secret_key: str = os.getenv(
+        "SECRET_KEY", "a-string-secret-at-least-256-bits-long"
+    )
     algorithm: str = os.getenv("ALGORITHM", "HS256")
 
     oauth_providers: Dict[str, OAuthProviderConfig] = {
         "yandex": OAuthProviderConfig(
             client_id=os.getenv("YANDEX_CLIENT_ID"),
             client_secret=os.getenv("YANDEX_CLIENT_SECRET"),
-            redirect_uri=os.getenv("YANDEX_REDIRECT_URI", "http://localhost:8000/api/v1/oauth/yandex/callback")
+            redirect_uri=os.getenv(
+                "YANDEX_REDIRECT_URI",
+                "http://localhost:8000/api/v1/oauth/yandex/callback"
+            )
         )
     }
 
-    frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    # frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
     class Config:
         env_file = ".env"

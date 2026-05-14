@@ -26,5 +26,4 @@ class OAuthProviderFactory:
         )
 
 
-# Регистрируем провайдеров
 OAuthProviderFactory.register_provider("yandex", YandexOAuthProvider)

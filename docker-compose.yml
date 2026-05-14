@@ -43,6 +43,22 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    ports:
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "16686:16686"
+      - "14268:14268"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:16686"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     
   auth-service:
     build: ./services/auth-service
@@ -55,17 +71,22 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_HOST=${POSTGRES_HOST}
       - POSTGRES_PORT=5432
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_DB=0
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_DB=${REDIS_DB}
       - SECRET_KEY=${SECRET_KEY}
       - ALGORITHM=${ALGORITHM}
       - YANDEX_CLIENT_ID=${YANDEX_CLIENT_ID}
       - YANDEX_CLIENT_SECRET=${YANDEX_CLIENT_SECRET}
       - YANDEX_REDIRECT_URI=${YANDEX_REDIRECT_URI}
+      - JAEGER_AGENT_HOST=${JAEGER_AGENT_HOST}
+      - JAEGER_AGENT_PORT=${JAEGER_AGENT_PORT}
+      - JAEGER_COLLECTOR_ENDPOINT=${JAEGER_COLLECTOR_ENDPOINT}
+      - ENABLE_TRACING=${ENABLE_TRACING}
     depends_on:
       - postgres
       - redis
+      - jaeger
 
   content-service:
     build: ./services/content-service
@@ -73,9 +94,9 @@ services:
     ports:
       - "8001:8000"
     environment:
-      - PROJECT_NAME=movies
-      - REDIS_HOST=redis
-      - ELASTIC_HOST=elasticsearch
+      - PROJECT_NAME=${ETL_POSTGRES_DB}
+      - REDIS_HOST=${REDIS_HOST}
+      - ELASTIC_HOST=${ELASTIC_HOST}
     depends_on:
       - redis
       - elasticsearch

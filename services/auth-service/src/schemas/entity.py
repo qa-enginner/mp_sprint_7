@@ -109,6 +109,12 @@ class UserUpdatePassword(BaseModel):
         return v
 
 
+class UserUpdateSuperuser(BaseModel):
+    is_superuser: bool = Field(
+        ..., description="Set superuser status (true/false)"
+    )
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str

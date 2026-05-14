@@ -9,6 +9,7 @@ from schemas.entity import (
     UserInDB,
     LoginHistoryResponse,
     UserUpdatePassword,
+    UserUpdateSuperuser,
     TokenData,
 )
 from services.user_service import UserService
@@ -125,5 +126,35 @@ async def get_login_history(
     """
     return await UserService.get_login_history(
         user_id=uuid.UUID(user_id),
+        db=db
+    )
+
+
+@router.patch(
+    "/{user_id}/superuser",
+    response_model=UserInDB,
+    status_code=status.HTTP_200_OK,
+    summary="Обновить статус суперпользователя",
+    responses={
+        200: {"description": "Статус суперпользователя обновлен"},
+        400: {"description": "Некорректные данные"},
+        401: {"description": "Не авторизован"},
+        403: {"description": "Недостаточно прав"},
+        404: {"description": "Пользователь не найден"},
+    }
+)
+async def update_superuser(
+    user_id: str,
+    update_data: UserUpdateSuperuser,
+    db: AsyncSession = Depends(get_session)
+) -> UserInDB:
+    """
+    Обновляет статус суперпользователя для указанного пользователя.
+    Требуются права суперпользователя.
+    """
+    # TODO: добавить проверку прав (только суперпользователь может менять)
+    return await UserService.update_superuser(
+        user_id=uuid.UUID(user_id),
+        is_superuser=update_data.is_superuser,
         db=db
     )

@@ -7,6 +7,10 @@ from redis.asyncio import Redis
 from api.v1 import auth, users, oauth
 from core import config
 from core.middleware import logging_middleware
+from core.rate_limit_middleware import rate_limit_middleware
+from core.request_id_middleware import request_id_middleware
+from core.tracing import instrument_app
+from core.tracing_middleware import tracing_middleware
 from core.cors import setup_cors
 from db import redis_db
 from db.postgres import create_database, wait_for_postgres
@@ -76,9 +80,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Instrument application for tracing
+logger.debug(f"enable_tracing = {config.settings.enable_tracing}")
+instrument_app(app)
+
 # Setup CORS middleware
 setup_cors(app)
 
+app.middleware('http')(tracing_middleware)
+app.middleware('http')(request_id_middleware)
+app.middleware('http')(rate_limit_middleware)
 app.middleware('http')(logging_middleware)
 
 
