@@ -115,7 +115,7 @@ Auth_sprint_2/
 
 1. **Клонируйте репозиторий**:
    ```bash
-   cd mp_sprint_7
+   git clone https://github.com/Practicum-MP/mp_sprint_7
    ```
 
 2. **Создайте файл .env на основе .env.example**:
