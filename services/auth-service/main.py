@@ -1,3 +1,5 @@
+import os
+import subprocess
 import uvicorn
 from loguru import logger
 from contextlib import asynccontextmanager
@@ -13,7 +15,7 @@ from core.tracing import instrument_app
 from core.tracing_middleware import tracing_middleware
 from core.cors import setup_cors
 from db import redis_db
-from db.postgres import create_database, wait_for_postgres
+from db.postgres import wait_for_postgres
 
 
 @asynccontextmanager
@@ -42,12 +44,22 @@ async def lifespan(app: FastAPI):
         logger.error("✗ PostgreSQL is not available. Exiting.")
         raise Exception("PostgreSQL is not available")
 
-    # Создаем таблицы в базе данных
+    # Применяем миграции базы данных
     try:
-        await create_database()
-        logger.info("✓ Database tables created successfully")
+        result = subprocess.run(
+            ["alembic", "upgrade", "head"],
+            cwd=os.path.dirname(__file__),
+            capture_output=True,
+            text=True
+        )
+        if result.returncode == 0:
+            logger.info("✓ Database migrations applied successfully")
+        else:
+            logger.error(f"✗ Failed to apply migrations: {result.stderr}")
+            raise Exception(f"Migration failed: {result.stderr}")
     except Exception as e:
-        logger.error(f"✗ Failed to create database tables: {e}")
+        logger.error(f"✗ Failed to apply database migrations: {e}")
+        raise
 
     # Настраиваем логирование
     logger.add(

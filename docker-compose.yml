@@ -84,9 +84,12 @@ services:
       - JAEGER_COLLECTOR_ENDPOINT=${JAEGER_COLLECTOR_ENDPOINT}
       - ENABLE_TRACING=${ENABLE_TRACING}
     depends_on:
-      - postgres
-      - redis
-      - jaeger
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
 
   content-service:
     build: ./services/content-service
