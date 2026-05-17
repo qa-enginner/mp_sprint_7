@@ -140,3 +140,20 @@ class LoginHistoryResponse(BaseModel):
     model_config = ConfigDict(
         from_attributes=True
     )
+
+
+class PaginatedResponse(BaseModel):
+    """
+    Стандартный ответ с пагинацией.
+
+    Используется для эндпоинтов, возвращающих списки с разбивкой на страницы.
+    """
+    items: list
+    page: int
+    size: int
+    total: int
+    pages: int
+
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True
+    )

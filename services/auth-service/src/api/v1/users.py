@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, status, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, status
 import uuid
 
-from db.postgres import get_session
 from core.security import security
+from core.dependencies import (
+    RequestContext, PaginationParams, require_superuser
+)
 from schemas.entity import (
     UserUpdateLogin,
     UserInDB,
@@ -23,6 +24,9 @@ async def get_current_user_id(
     """
     Извлекает user_id из access token.
     Использует кастомный HTTPBearer для проверки токена.
+
+    Примечание: Оставлено для обратной совместимости.
+    В новых эндпоинтах используйте RequestContext.
     """
     return token_data.user_id
 
@@ -39,15 +43,14 @@ async def get_current_user_id(
     }
 )
 async def get_current_user(
-    user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_session)
+    context: RequestContext = Depends(RequestContext.from_depends)
 ) -> UserInDB:
     """
     Возвращает информацию о текущем пользователе.
     """
     return await UserService.get_user(
-        user_id=uuid.UUID(user_id),
-        db=db
+        user_id=uuid.UUID(context.user_id),
+        db=context.db
     )
 
 
@@ -66,16 +69,15 @@ async def get_current_user(
 )
 async def update_login(
     update_data: UserUpdateLogin,
-    user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_session)
+    context: RequestContext = Depends(RequestContext.from_depends)
 ) -> UserInDB:
     """
     Обновляет логин текущего пользователя.
     """
     return await UserService.update_login(
-        user_id=user_id,
+        user_id=context.user_id,
         update_data=update_data,
-        db=db
+        db=context.db
     )
 
 
@@ -93,16 +95,15 @@ async def update_login(
 )
 async def update_password(
     update_data: UserUpdatePassword,
-    user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_session)
+    context: RequestContext = Depends(RequestContext.from_depends)
 ) -> UserInDB:
     """
     Изменяет пароль текущего пользователя после проверки текущего пароля.
     """
     return await UserService.update_password(
-        user_id=uuid.UUID(user_id),
+        user_id=uuid.UUID(context.user_id),
         update_data=update_data,
-        db=db
+        db=context.db
     )
 
 
@@ -118,15 +119,17 @@ async def update_password(
     }
 )
 async def get_login_history(
-    user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_session)
+    pagination: PaginationParams = Depends(),
+    context: RequestContext = Depends(RequestContext.from_depends)
 ) -> list[LoginHistoryResponse]:
     """
-    Возвращает историю входов текущего пользователя.
+    Возвращает историю входов текущего пользователя с пагинацией.
     """
     return await UserService.get_login_history(
-        user_id=uuid.UUID(user_id),
-        db=db
+        user_id=uuid.UUID(context.user_id),
+        db=context.db,
+        page=pagination.page,
+        size=pagination.size
     )
 
 
@@ -146,26 +149,14 @@ async def get_login_history(
 async def update_superuser(
     user_id: str,
     update_data: UserUpdateSuperuser,
-    token_data: TokenData = Depends(security),
-    db: AsyncSession = Depends(get_session)
+    context: RequestContext = Depends(require_superuser)
 ) -> UserInDB:
     """
     Обновляет статус суперпользователя для указанного пользователя.
     Требуются права суперпользователя.
     """
-    # Получаем текущего пользователя (того, кто делает запрос)
-    current_user = await UserService.get_user(
-        user_id=uuid.UUID(token_data.user_id),
-        db=db
-    )
-    # Проверяем, что текущий пользователь - суперпользователь
-    if not current_user.is_superuser:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Недостаточно прав для изменения статуса суперпользователя"
-        )
     return await UserService.update_superuser(
         user_id=uuid.UUID(user_id),
         is_superuser=update_data.is_superuser,
-        db=db
+        db=context.db
     )

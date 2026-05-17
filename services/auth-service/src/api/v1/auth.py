@@ -1,15 +1,13 @@
 from fastapi import APIRouter, Depends, Request, status, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.postgres import get_session
-from core.security import optional_security, security
+from core.security import optional_security
+from core.dependencies import RequestContext, get_db_context
 from schemas.entity import (
         UserCreate,
         UserInDB,
         UserLogin,
         TokenResponse,
         TokenRefresh,
-        TokenData
     )
 from services.auth_service import AuthService
 
@@ -23,9 +21,9 @@ router = APIRouter()
 )
 async def create_user(
     user_create: UserCreate,
-    db: AsyncSession = Depends(get_session)
+    context: RequestContext = Depends(get_db_context)
 ) -> UserInDB:
-    return await AuthService.create_user(user_create, db)
+    return await AuthService.create_user(user_create, context.db)
 
 
 @router.post(
@@ -37,14 +35,14 @@ async def create_user(
 async def login(
     request: Request,
     login_data: UserLogin,
-    db: AsyncSession = Depends(get_session)
+    context: RequestContext = Depends(get_db_context)
 ):
     """
     Authenticate user by email and password.
 
     Returns access and refresh tokens upon successful authentication.
     """
-    return await AuthService.login(login_data, request, db)
+    return await AuthService.login(login_data, request, context.db)
 
 
 @router.post(
@@ -55,10 +53,10 @@ async def login(
 async def refresh(
     request: Request,
     token_refresh: TokenRefresh,
-    db: AsyncSession = Depends(get_session)
+    context: RequestContext = Depends(get_db_context)
 ):
     return await AuthService.refresh_token(
-        token_refresh.refresh_token, request, db
+        token_refresh.refresh_token, request, context.db
     )
 
 
@@ -98,38 +96,37 @@ async def logout(
         if await AuthService.is_token_blacklisted(access_token):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token revoked",
+                detail="Token is blacklisted",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-    else:
-        # Токен уже проверен на валидность и черный список
-        access_token = token_data.token
+        # Проверяем refresh token
+        if await AuthService.is_token_blacklisted(token_refresh.refresh_token):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token is blacklisted",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        # Добавляем оба токена в черный список
+        await AuthService.blacklist_token(access_token)
+        await AuthService.blacklist_token(token_refresh.refresh_token)
+        return {"message": "Logged out successfully"}
 
-    if not access_token:
+    # Если токен предоставлен и валиден
+    # Проверяем черный список для access token из token_data
+    if await AuthService.is_token_blacklisted(token_data.token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Access token missing",
+            detail="Token is blacklisted",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-    return await AuthService.logout(access_token, token_refresh.refresh_token)
-
-
-@router.get(
-    '/validate',
-    response_model=TokenData,
-    status_code=status.HTTP_200_OK,
-    summary="Валидация токена",
-    responses={
-        200: {"description": "Токен валиден"},
-        401: {"description": "Не авторизован или неверный токен"}
-    }
-)
-async def validate_token(
-    token_data: TokenData = Depends(security)
-) -> TokenData:
-    """
-    Валидация access токена.
-    Возвращает данные токена (user_id и token).
-    """
-    return token_data
+    # Проверяем refresh token
+    if await AuthService.is_token_blacklisted(token_refresh.refresh_token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token is blacklisted",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # Добавляем оба токена в черный список
+    await AuthService.blacklist_token(token_data.token)
+    await AuthService.blacklist_token(token_refresh.refresh_token)
+    return {"message": "Logged out successfully"}

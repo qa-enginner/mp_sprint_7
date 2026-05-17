@@ -132,14 +132,29 @@ class UserService:
     @staticmethod
     async def get_login_history(
         user_id: uuid.UUID,
-        db: AsyncSession
+        db: AsyncSession,
+        page: int = 1,
+        size: int = 50
     ) -> list[LoginHistoryResponse]:
         """
-        Возвращает историю входов пользователя.
+        Возвращает историю входов пользователя с пагинацией.
+
+        Args:
+            user_id: ID пользователя
+            db: Сессия базы данных
+            page: Номер страницы (начинается с 1)
+            size: Количество записей на странице
+
+        Returns:
+            list[LoginHistoryResponse]: Список записей истории входов
         """
+        offset = (page - 1) * size
         stmt = select(LoginHistory).where(
             LoginHistory.user_id == user_id
-        ).order_by(desc(LoginHistory.time))
+        ).order_by(
+            desc(LoginHistory.time)
+        ).offset(offset).limit(size)
+
         result = await db.execute(stmt)
         history = result.scalars().all()
         return [

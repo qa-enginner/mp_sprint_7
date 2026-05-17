@@ -2,11 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.oauth_factory import OAuthProviderFactory
 from db import redis_db
-from db.postgres import get_session
+from core.dependencies import get_db_context
 from services.auth_service import AuthService
 from services.user_service import UserService
 import secrets
-from datetime import datetime
 from loguru import logger
 
 router = APIRouter()
@@ -99,32 +98,43 @@ async def _process_oauth_callback(
     access_token = AuthService.create_access_token(user.id)
     refresh_token, expire = AuthService.create_refresh_token(user.id)
 
-    # Сохраняем токен обновления в Redis
+    # 6. Сохраняем refresh token в БД
+    await AuthService.save_refresh_token(
+        user_id=user.id,
+        refresh_token=refresh_token,
+        user_agent=request.headers.get("User-Agent", ""),
+        ip_address=request.client.host if request.client else None,
+        db=db
+    )
+
+    # 7. Удаляем использованный state из Redis
     if redis_db.redis:
-        key = f"{user.id}_refresh"
-        # Вычисляем TTL в секундах
-        ttl = int((expire - datetime.utcnow()).total_seconds())
-        await redis_db.redis.setex(key, ttl, refresh_token)
+        await redis_db.redis.delete(f"oauth_state:{state}")
 
-    await AuthService.save_login_history(user.id, request, db)
-
-    # 6. Возвращаем JSON с токенами
     return {
         "access_token": access_token,
-        "refresh_token": refresh_token
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "expires_in": expire,
+        "user": user
     }
 
 
-@router.get("/{provider}/callback")
-async def oauth_callback_with_provider(
+@router.get("/callback")
+async def oauth_callback(
+    request: Request,
     provider: str,
     code: str,
     state: str,
-    request: Request,
-    db: AsyncSession = Depends(get_session)
+    context=Depends(get_db_context)
 ):
     """
-    Callback URL с указанием провайдера в пути.
-    Обрабатывает код авторизации и создает/авторизует пользователя.
+    Callback endpoint для OAuth провайдеров.
     """
-    return await _process_oauth_callback(provider, code, state, request, db)
+    return await _process_oauth_callback(
+        provider=provider,
+        code=code,
+        state=state,
+        request=request,
+        db=context.db
+    )
