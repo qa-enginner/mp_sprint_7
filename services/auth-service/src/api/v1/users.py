@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 
@@ -146,13 +146,24 @@ async def get_login_history(
 async def update_superuser(
     user_id: str,
     update_data: UserUpdateSuperuser,
+    token_data: TokenData = Depends(security),
     db: AsyncSession = Depends(get_session)
 ) -> UserInDB:
     """
     Обновляет статус суперпользователя для указанного пользователя.
     Требуются права суперпользователя.
     """
-    # TODO: добавить проверку прав (только суперпользователь может менять)
+    # Получаем текущего пользователя (того, кто делает запрос)
+    current_user = await UserService.get_user(
+        user_id=uuid.UUID(token_data.user_id),
+        db=db
+    )
+    # Проверяем, что текущий пользователь - суперпользователь
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Недостаточно прав для изменения статуса суперпользователя"
+        )
     return await UserService.update_superuser(
         user_id=uuid.UUID(user_id),
         is_superuser=update_data.is_superuser,

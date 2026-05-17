@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,6 +7,7 @@ from sqlalchemy import select
 from asyncpg import UniqueViolationError
 from fastapi import HTTPException, Request, status
 from jose import jwt
+from loguru import logger
 
 from core.config import settings
 from db import redis_db
@@ -62,7 +64,7 @@ class AuthService:
                 )
             raise e
         await db.refresh(user)
-        return UserInDB.from_orm(user)
+        return UserInDB.model_validate(user)
 
     @staticmethod
     def create_access_token(user_id: uuid.UUID) -> str:
@@ -223,7 +225,8 @@ class AuthService:
             # Если Redis недоступен, считаем, что токен не в черном списке,
             # но логируем предупреждение (пока просто пропускаем)
             return False
-        key = f"blacklist_{access_token}"
+        hashed_token = hashlib.sha256(access_token.encode()).hexdigest()
+        key = f"blacklist:{hashed_token}"
         exists = await redis_db.redis.exists(key)
         return bool(exists)
 
@@ -284,14 +287,22 @@ class AuthService:
                 if exp:
                     ttl = exp - int(datetime.utcnow().timestamp())
                     if ttl > 0:
+                        hashed_token = hashlib.sha256(
+                            access_token.encode()
+                        ).hexdigest()
                         await redis_db.redis.setex(
-                            f"blacklist_{access_token}",
+                            f"blacklist:{hashed_token}",
                             ttl,
                             "revoked"
                         )
-            except Exception:
-                # Если не удалось декодировать токен, просто продолжаем
+            except (jwt.JWTError, jwt.ExpiredSignatureError):
+                # Игнорируем ошибки JWT (просроченный или невалидный токен)
                 pass
+            except Exception as e:
+                logger.critical(
+                    "Unexpected critical error "
+                    f"while decoding access token during logout: {e}"
+                )
 
         except jwt.JWTError:
             raise HTTPException(

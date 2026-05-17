@@ -37,7 +37,7 @@ async def wait_for_postgres(retries: int = 5, delay: int = 2) -> bool:
     for attempt in range(retries):
         try:
             from sqlalchemy import text
-            engine = create_async_engine(dsn, echo=False, future=True)
+            engine = create_async_engine(dsn, echo=settings.postgres_echo, future=True)
             async with engine.begin() as conn:
                 await conn.execute(text("SELECT 1"))
             await engine.dispose()
@@ -58,7 +58,7 @@ async def wait_for_postgres(retries: int = 5, delay: int = 2) -> bool:
 def get_engine():
     """Создаёт и возвращает движок SQLAlchemy."""
     dsn = get_postgres_dsn()
-    return create_async_engine(dsn, echo=True, future=True)
+    return create_async_engine(dsn, echo=settings.postgres_echo, future=True)
 
 
 engine = get_engine()

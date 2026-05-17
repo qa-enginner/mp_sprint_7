@@ -1,7 +1,14 @@
 import http
+import logging
 from typing import Optional
-
 from jose import jwt
+from jose.exceptions import (
+    JWTError,
+    ExpiredSignatureError,
+    JWTClaimsError,
+    JWSSignatureError,
+    JWSError
+)
 from fastapi import HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -16,14 +23,35 @@ def decode_token(token: str) -> Optional[dict]:
     было выброшено исключение.
     """
     try:
-        import logging
-        logging.debug(f"Decoding token: {token[:20]}...")
-        logging.debug(f"Secret key: {settings.secret_key[:10]}...")
         logging.debug(f"Algorithm: {settings.algorithm}")
         return jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-    except Exception as e:
-        import logging
-        logging.error(f"Token decode error: {e}")
+
+    except ExpiredSignatureError as e:
+        logging.error(f"Token expired: {e}")
+        logging.error(f"Token length: {len(token)}")
+        return None
+
+    except JWTClaimsError as e:
+        logging.error(f"Invalid JWT claims (e.g., audience, issuer validation failed): {e}")
+        logging.error(f"Token length: {len(token)}")
+        logging.error(f"Token repr: {repr(token)}")
+        return None
+
+    except JWSSignatureError as e:
+        logging.error(f"Invalid token signature: {e}")
+        logging.error(f"Token length: {len(token)}")
+        logging.error(f"Token repr: {repr(token)}")
+        return None
+
+    except JWSError as e:
+        logging.error(f"JWS error (invalid format or structure): {e}")
+        logging.error(f"Token length: {len(token)}")
+        logging.error(f"Token repr: {repr(token)}")
+        return None
+
+    except JWTError as e:
+        # Базовое исключение для всех остальных ошибок JWT
+        logging.error(f"JWT decode error: {e}")
         logging.error(f"Token length: {len(token)}")
         logging.error(f"Token repr: {repr(token)}")
         return None

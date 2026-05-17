@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     postgres_host: str = os.getenv("POSTGRES_HOST", "localhost")
     postgres_port: int = int(os.getenv("POSTGRES_PORT", "5432"))
     postgres_db: str = os.getenv("POSTGRES_DB", "auth_db")
+    postgres_echo: bool = os.getenv("POSTGRES_ECHO", "false").lower() in (
+        "true", "1", "yes"
+    )
 
     # Настройки Redis
     redis_host: str = os.getenv("REDIS_HOST", "localhost")
@@ -68,6 +71,20 @@ class Settings(BaseSettings):
             )
         )
     }
+
+    # CORS settings
+    cors_allowed_origins: str = os.getenv("CORS_ALLOWED_ORIGINS", "")
+    cors_allow_all_origins: bool = os.getenv(
+        "CORS_ALLOW_ALL_ORIGINS", "false"
+    ).lower() in ("true", "1", "yes")
+    cors_allow_methods: str = os.getenv(
+        "CORS_ALLOW_METHODS", "GET,POST,PUT,DELETE,OPTIONS"
+    )
+    cors_allow_headers: str = os.getenv(
+        "CORS_ALLOW_HEADERS", "Content-Type,Authorization,Accept"
+    )
+    cors_expose_headers: str = os.getenv("CORS_EXPOSE_HEADERS", "")
+    environment: str = os.getenv("ENVIRONMENT", "development")
 
     # frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
 

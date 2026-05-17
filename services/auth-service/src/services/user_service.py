@@ -49,7 +49,7 @@ class UserService:
         await db.commit()
         await db.refresh(user)
 
-        return UserInDB.from_orm(user)
+        return UserInDB.model_validate(user)
 
     @staticmethod
     async def update_password(
@@ -82,7 +82,7 @@ class UserService:
         await db.commit()
         await db.refresh(user)
 
-        return UserInDB.from_orm(user)
+        return UserInDB.model_validate(user)
 
     @staticmethod
     async def update_superuser(
@@ -109,7 +109,7 @@ class UserService:
         await db.commit()
         await db.refresh(user)
 
-        return UserInDB.from_orm(user)
+        return UserInDB.model_validate(user)
 
     @staticmethod
     async def get_user(
@@ -127,7 +127,7 @@ class UserService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        return UserInDB.from_orm(user)
+        return UserInDB.model_validate(user)
 
     @staticmethod
     async def get_login_history(
@@ -142,7 +142,9 @@ class UserService:
         ).order_by(desc(LoginHistory.time))
         result = await db.execute(stmt)
         history = result.scalars().all()
-        return [LoginHistoryResponse.from_orm(entry) for entry in history]
+        return [
+            LoginHistoryResponse.model_validate(entry) for entry in history
+        ]
 
     @staticmethod
     async def find_or_create_user_by_social(

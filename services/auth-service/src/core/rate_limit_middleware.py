@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
 
 from core.config import settings
+from core.security import decode_token
 from db.redis_db import get_redis
 
 
@@ -25,14 +26,14 @@ async def rate_limit_middleware(
 
     # Определяем идентификатор для ограничения
     identifier = await _get_identifier(request)
+    # Ключ с точностью до минуты в формате ГГГГММДДЧЧММ
     now = datetime.datetime.now()
-    # Ключ: идентификатор:текущая_минута
-    key = f'{identifier}:{now.minute}'
+    key = f'{identifier}:{now.strftime("%Y%m%d%H%M")}'
 
     # Создаем pipeline для атомарности
     pipe = redis.pipeline()
     pipe.incr(key, 1)
-    pipe.expire(key, 59)  # TTL 59 секунд, чтобы ключ удалился в конце минуты
+    pipe.expire(key, 120)  # TTL 120 секунд для автоматической очистки старых ключей
     result = await pipe.execute()
 
     # Результат incr находится по индексу 0
@@ -53,11 +54,20 @@ async def rate_limit_middleware(
 async def _get_identifier(request: Request) -> str:
     """
     Возвращает идентификатор для rate limiting.
-    Приоритет: user_id из токена, затем IP-адрес.
+    Составной ключ: user_id из токена и IP-адрес.
+    Всегда включает оба компонента.
+    Если пользователь аутентифицирован, использует user_id из токена,
+    иначе 'unknown'.
     """
-    # Проверяем, есть ли аутентифицированный пользователь
-    # В проекте используется security = JWTBearer(),
-    # который добавляет request.state.user?
-    # Пока что используем IP-адрес
     client_ip = request.client.host if request.client else 'unknown'
-    return f'ip:{client_ip}'
+
+    # Пытаемся получить токен из заголовка Authorization
+    user_id = 'unknown'
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1].strip()
+        decoded = decode_token(token)
+        if decoded and "sub" in decoded:
+            user_id = decoded["sub"]
+
+    return f'user:{user_id}:ip:{client_ip}'
